@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8">
+<title>Supply Chain Industry Map</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { font-family: 'Noto Sans TC','Helvetica Neue',Arial,sans-serif; background:#0f172a; color:#e2e8f0; overflow-x:hidden; }
+.header { background:linear-gradient(135deg,#0f766e,#115e59); padding:16px 24px; display:flex; justify-content:space-between; align-items:center; }
+.header h1 { font-size:20px; font-weight:700; letter-spacing:1px; }
+.header .ts { font-size:11px; opacity:.7; }
+.breadcrumb { padding:8px 24px; background:#1e293b; font-size:12px; border-bottom:1px solid #334155; }
+.breadcrumb a { color:#5eead4; text-decoration:none; cursor:pointer; }
+.breadcrumb span { color:#64748b; }
+
+/* ── Overview Page ── */
+#overview { padding:20px 24px; }
+.sector-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:16px; }
+.sector-card { background:#1e293b; border:1px solid #334155; border-radius:8px; padding:16px; cursor:pointer; transition:all .2s; position:relative; overflow:hidden; }
+.sector-card:hover { border-color:#5eead4; transform:translateY(-2px); box-shadow:0 4px 12px rgba(0,0,0,.3); }
+.sector-card .color-bar { position:absolute; top:0; left:0; width:4px; height:100%; }
+.sector-card h3 { font-size:15px; font-weight:700; margin-bottom:6px; display:flex; align-items:center; gap:8px; }
+.sector-card .stats { font-size:11px; color:#94a3b8; margin-bottom:8px; }
+.sector-card .node-list { display:flex; flex-wrap:wrap; gap:4px; }
+.sector-card .node-tag { padding:2px 8px; background:#0f172a; border-radius:4px; font-size:10px; }
+.sector-card .badge-row { margin-top:8px; display:flex; gap:4px; flex-wrap:wrap; }
+.sector-card .badge-tag { padding:1px 6px; border-radius:3px; font-size:9px; }
+
+/* ── Detail Page (graph) ── */
+#detail { display:none; }
+.controls { padding:10px 20px; background:#1e293b; display:flex; gap:12px; align-items:center; flex-wrap:wrap; border-bottom:1px solid #334155; }
+.controls input { background:#334155; border:1px solid #475569; color:#e2e8f0; padding:6px 12px; border-radius:4px; font-size:12px; width:200px; }
+.badge-legend { display:flex; gap:10px; margin-left:auto; font-size:10px; }
+.badge-legend span { display:flex; align-items:center; gap:3px; }
+#graph { width:100%; height:calc(100vh - 140px); }
+.tooltip { position:absolute; background:#1e293b; border:1px solid #475569; border-radius:6px; padding:10px 14px; font-size:11px; pointer-events:none; z-index:100; max-width:340px; box-shadow:0 4px 12px rgba(0,0,0,.4); }
+.tooltip h3 { font-size:13px; color:#5eead4; margin-bottom:4px; }
+.tooltip .meta { color:#94a3b8; font-size:10px; margin-bottom:4px; }
+.tooltip .badge-tag { display:inline-block; padding:1px 6px; border-radius:3px; font-size:9px; margin-right:3px; }
+.tooltip .edges { font-size:10px; line-height:1.5; }
+.tooltip .edges b { color:#f59e0b; }
+.node-label { font-size:10px; fill:#cbd5e1; pointer-events:none; text-anchor:middle; font-weight:600; }
+.link-label { font-size:8px; fill:#64748b; pointer-events:none; text-anchor:middle; }
+.sidebar { position:fixed; right:0; top:130px; width:320px; background:#1e293b; border-left:1px solid #334155; height:calc(100vh - 130px); overflow-y:auto; padding:14px; display:none; z-index:50; }
+.sidebar.open { display:block; }
+.sidebar h3 { color:#5eead4; font-size:14px; margin-bottom:8px; }
+.sidebar .close { position:absolute; top:8px; right:12px; cursor:pointer; color:#94a3b8; font-size:18px; }
+.sidebar table { width:100%; font-size:11px; border-collapse:collapse; }
+.sidebar td { padding:4px 8px; border-bottom:1px solid #334155; }
+.sidebar td:first-child { color:#94a3b8; width:35%; }
+.sidebar .badge-section { margin:8px 0; padding:8px; background:#0f172a; border-radius:4px; }
+.sidebar .badge-item { display:inline-block; padding:2px 8px; border-radius:4px; font-size:11px; margin:2px; }
+.back-btn { padding:6px 14px; background:#334155; border:1px solid #475569; color:#e2e8f0; border-radius:4px; cursor:pointer; font-size:12px; transition:all .2s; }
+.back-btn:hover { background:#475569; }
+.layout-toggle { padding:5px 12px; background:#0f766e; border:1px solid #14b8a6; color:#e2e8f0; border-radius:4px; cursor:pointer; font-size:11px; font-weight:600; transition:all .2s; }
+.layout-toggle:hover { background:#14b8a6; color:#0f172a; }
+.layout-toggle.active { background:#14b8a6; color:#0f172a; }
+</style>
+</head>
+<body>
+<div class="header">
+  <div><h1>🗺️ Supply Chain Industry Map</h1>
+  <div class="ts">Generated: 2026-02-19 16:10 | 31 Companies | 5 Relationships</div></div>
+</div>
+<div class="breadcrumb" id="breadcrumb">
+  <a onclick="showOverview()">🏠 All Sectors</a>
+  <span id="bc-sector"></span>
+</div>
+
+<!-- ═══ OVERVIEW PAGE ═══ -->
+<div id="overview">
+  <div class="sector-grid" id="sectorGrid"></div>
+</div>
+
+<!-- ═══ DETAIL PAGE (D3 Graph) ═══ -->
+<div id="detail">
+  <div class="controls">
+    <button class="back-btn" onclick="showOverview()">← All Sectors</button>
+    <button class="layout-toggle active" id="btn-dagre" onclick="switchLayout('dagre')">📊 Dagre (Hierarchy)</button>
+    <button class="layout-toggle" id="btn-force" onclick="switchLayout('force')">🌐 Force (Organic)</button>
+    <input type="text" id="search" placeholder="🔍 Search...">
+    <div class="badge-legend">
+      <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="none" stroke="#22c55e" stroke-width="2"/></svg> Ops Leverage</span>
+      <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="none" stroke="#f59e0b" stroke-width="2"/></svg> Capex Boost</span>
+      <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="none" stroke="#ef4444" stroke-width="2"/></svg> Inv Risk</span>
+      <span><svg width="10" height="10"><circle cx="5" cy="5" r="4" fill="none" stroke="#06b6d4" stroke-width="2"/></svg> Restocking</span>
+    </div>
+  </div>
+  <svg id="graph"></svg>
+  <div class="sidebar" id="sidebar">
+    <span class="close" onclick="closeSidebar()">✕</span>
+    <div id="sidebar-content"></div>
+  </div>
+</div>
+<div class="tooltip" id="tooltip" style="display:none"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.8.5/d3.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/dagre/0.8.5/dagre.min.js"></script>
+<script>
+const allData = {"nodes": [{"id": "TSLA", "name": "Tesla", "sector": "EV/Auto", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#8b5cf6", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:SUN", "name": "Sun PhuQuoc airways", "sector": "Unclassified", "country": "Unknown", "tier": 3, "watchlist": false, "degree": 1, "color": "#6366f1", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "ASML", "name": "ASML", "sector": "Semiconductors", "country": "NL", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "MSFT", "name": "Microsoft", "sector": "Cloud/Software", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "AMD", "name": "AMD", "sector": "Semiconductors", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "AVGO", "name": "Broadcom", "sector": "Semiconductors", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:VIETNAM", "name": "Vietnam Airlines", "sector": "Unclassified", "country": "Unknown", "tier": 3, "watchlist": false, "degree": 1, "color": "#6366f1", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "AAPL", "name": "Apple", "sector": "Consumer Electronics", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#ef4444", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "SNOW", "name": "Snowflake", "sector": "Cloud/Software", "country": "US", "tier": 2, "watchlist": true, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": -0.22713677612976327}, {"id": "BA", "name": "Boeing", "sector": "Unclassified", "country": "US", "tier": 3, "watchlist": false, "degree": 2, "color": "#6366f1", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "NVDA", "name": "NVIDIA", "sector": "Semiconductors", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "AMZN", "name": "Amazon", "sector": "Cloud/Software", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "005930.KS", "name": "Samsung Electronics", "sector": "Semiconductors", "country": "KR", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "GOOGL", "name": "Google/Alphabet", "sector": "Cloud/Software", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "1519.TW", "name": "華城電機", "sector": "Power Equipment", "country": "TW", "tier": 1, "watchlist": false, "degree": 0, "color": "#f97316", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "MU", "name": "Micron", "sector": "Semiconductors", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:PARADIGM", "name": "Paradigm", "sector": "Unclassified", "country": "Unknown", "tier": 3, "watchlist": false, "degree": 1, "color": "#6366f1", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "INTC", "name": "Intel", "sector": "Semiconductors", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "ARM", "name": "Arm Holdings", "sector": "Semiconductors", "country": "US", "tier": 2, "watchlist": true, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": 0.6713286713286714}, {"id": "QCOM", "name": "Qualcomm", "sector": "Semiconductors", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "2884.TW", "name": "玉山金控", "sector": "Financial Services", "country": "TW", "tier": 1, "watchlist": false, "degree": 0, "color": "#ec4899", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "000660.KS", "name": "SK Hynix", "sector": "Semiconductors", "country": "KR", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "2330.TW", "name": "TSMC", "sector": "Semiconductors", "country": "TW", "tier": 1, "watchlist": true, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "DUOL", "name": "Duolingo", "sector": "EdTech", "country": "US", "tier": 2, "watchlist": true, "degree": 0, "color": "#3b82f6", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": 0.5448699210757089}, {"id": "EXT:OPENAI", "name": "OpenAI", "sector": "AI/Compute", "country": "Unknown", "tier": 3, "watchlist": false, "degree": 1, "color": "#0d9488", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "NOW", "name": "ServiceNow", "sector": "Cloud/Software", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "META", "name": "Meta", "sector": "Cloud/Software", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:PAYWARD", "name": "EXT:PAYWARD", "sector": "Other", "country": "Unknown", "tier": 2, "watchlist": false, "degree": 1, "color": "#10b981", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:MAGNA", "name": "EXT:MAGNA", "sector": "Other", "country": "Unknown", "tier": 2, "watchlist": false, "degree": 1, "color": "#10b981", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "MIZUHO", "name": "MIZUHO", "sector": "Other", "country": "Unknown", "tier": 2, "watchlist": false, "degree": 1, "color": "#10b981", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:YEN", "name": "EXT:YEN", "sector": "Other", "country": "Unknown", "tier": 2, "watchlist": false, "degree": 1, "color": "#10b981", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "links": [{"source": "EXT:PAYWARD", "target": "EXT:MAGNA", "type": "customer_of", "category": "General", "status": "verified", "id": "30b02e61"}, {"source": "EXT:OPENAI", "target": "EXT:PARADIGM", "type": "partner", "category": "Blockchain Security", "status": "pending", "id": "30c02e61"}, {"source": "BA", "target": "EXT:VIETNAM", "type": "supplier_of", "category": "Airline", "status": "pending", "id": "30c02e61"}, {"source": "MIZUHO", "target": "EXT:YEN", "type": "partner", "category": "General", "status": "pending", "id": "30c02e61"}, {"source": "BA", "target": "EXT:SUN", "type": "supplier_of", "category": "Airline", "status": "verified", "id": "30c02e61"}]};
+const sectorColors = {"AI/Compute": "#0d9488", "Cloud/Software": "#f59e0b", "Consumer Electronics": "#ef4444", "EV/Auto": "#8b5cf6", "EdTech": "#3b82f6", "Financial Services": "#ec4899", "Other": "#10b981", "Power Equipment": "#f97316", "Semiconductors": "#06b6d4", "Unclassified": "#6366f1"};
+const sectorSummary = {"EV/Auto": {"nodes": [{"id": "TSLA", "name": "Tesla", "sector": "EV/Auto", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#8b5cf6", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "edge_count": 0, "badges": [], "countries": ["US"]}, "Unclassified": {"nodes": [{"id": "EXT:SUN", "name": "Sun PhuQuoc airways", "sector": "Unclassified", "country": "Unknown", "tier": 3, "watchlist": false, "degree": 1, "color": "#6366f1", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:VIETNAM", "name": "Vietnam Airlines", "sector": "Unclassified", "country": "Unknown", "tier": 3, "watchlist": false, "degree": 1, "color": "#6366f1", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "BA", "name": "Boeing", "sector": "Unclassified", "country": "US", "tier": 3, "watchlist": false, "degree": 2, "color": "#6366f1", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:PARADIGM", "name": "Paradigm", "sector": "Unclassified", "country": "Unknown", "tier": 3, "watchlist": false, "degree": 1, "color": "#6366f1", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "edge_count": 2, "badges": [], "countries": ["US", "Unknown"]}, "Semiconductors": {"nodes": [{"id": "ASML", "name": "ASML", "sector": "Semiconductors", "country": "NL", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "AMD", "name": "AMD", "sector": "Semiconductors", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "AVGO", "name": "Broadcom", "sector": "Semiconductors", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "NVDA", "name": "NVIDIA", "sector": "Semiconductors", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "005930.KS", "name": "Samsung Electronics", "sector": "Semiconductors", "country": "KR", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "MU", "name": "Micron", "sector": "Semiconductors", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "INTC", "name": "Intel", "sector": "Semiconductors", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "ARM", "name": "Arm Holdings", "sector": "Semiconductors", "country": "US", "tier": 2, "watchlist": true, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": 0.6713286713286714}, {"id": "QCOM", "name": "Qualcomm", "sector": "Semiconductors", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "000660.KS", "name": "SK Hynix", "sector": "Semiconductors", "country": "KR", "tier": 2, "watchlist": false, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "2330.TW", "name": "TSMC", "sector": "Semiconductors", "country": "TW", "tier": 1, "watchlist": true, "degree": 0, "color": "#06b6d4", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "edge_count": 0, "badges": [], "countries": ["KR", "NL", "TW", "US"]}, "Cloud/Software": {"nodes": [{"id": "MSFT", "name": "Microsoft", "sector": "Cloud/Software", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "SNOW", "name": "Snowflake", "sector": "Cloud/Software", "country": "US", "tier": 2, "watchlist": true, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": -0.22713677612976327}, {"id": "AMZN", "name": "Amazon", "sector": "Cloud/Software", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "GOOGL", "name": "Google/Alphabet", "sector": "Cloud/Software", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "NOW", "name": "ServiceNow", "sector": "Cloud/Software", "country": "US", "tier": 2, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "META", "name": "Meta", "sector": "Cloud/Software", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#f59e0b", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "edge_count": 0, "badges": [], "countries": ["US"]}, "Consumer Electronics": {"nodes": [{"id": "AAPL", "name": "Apple", "sector": "Consumer Electronics", "country": "US", "tier": 1, "watchlist": false, "degree": 0, "color": "#ef4444", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "edge_count": 0, "badges": [], "countries": ["US"]}, "Power Equipment": {"nodes": [{"id": "1519.TW", "name": "華城電機", "sector": "Power Equipment", "country": "TW", "tier": 1, "watchlist": false, "degree": 0, "color": "#f97316", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "edge_count": 0, "badges": [], "countries": ["TW"]}, "Financial Services": {"nodes": [{"id": "2884.TW", "name": "玉山金控", "sector": "Financial Services", "country": "TW", "tier": 1, "watchlist": false, "degree": 0, "color": "#ec4899", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "edge_count": 0, "badges": [], "countries": ["TW"]}, "EdTech": {"nodes": [{"id": "DUOL", "name": "Duolingo", "sector": "EdTech", "country": "US", "tier": 2, "watchlist": true, "degree": 0, "color": "#3b82f6", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": 0.5448699210757089}], "edge_count": 0, "badges": [], "countries": ["US"]}, "AI/Compute": {"nodes": [{"id": "EXT:OPENAI", "name": "OpenAI", "sector": "AI/Compute", "country": "Unknown", "tier": 3, "watchlist": false, "degree": 1, "color": "#0d9488", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "edge_count": 1, "badges": [], "countries": ["Unknown"]}, "Other": {"nodes": [{"id": "EXT:PAYWARD", "name": "EXT:PAYWARD", "sector": "Other", "country": "Unknown", "tier": 2, "watchlist": false, "degree": 1, "color": "#10b981", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:MAGNA", "name": "EXT:MAGNA", "sector": "Other", "country": "Unknown", "tier": 2, "watchlist": false, "degree": 1, "color": "#10b981", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "MIZUHO", "name": "MIZUHO", "sector": "Other", "country": "Unknown", "tier": 2, "watchlist": false, "degree": 1, "color": "#10b981", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}, {"id": "EXT:YEN", "name": "EXT:YEN", "sector": "Other", "country": "Unknown", "tier": 2, "watchlist": false, "degree": 1, "color": "#10b981", "badges": [], "doi_status": null, "doi_value": null, "cycle_phase": null, "fat": null, "capex_yoy": null}], "edge_count": 2, "badges": [], "countries": ["Unknown"]}};
+const badgeColors = {
+  '💰 Capex Boost': '#f59e0b',
+  '💰 Genuine Expansion': '#f59e0b',
+  '🟡 Capex Boost w/ Build-lag': '#f59e0b',
+  '🔴 Overcapacity Warning': '#ef4444',
+  '🚀 High Ops Leverage': '#22c55e',
+  '⚠️ Inventory Risk': '#ef4444',
+  '🟢 Restocking': '#06b6d4',
+};
+
+let currentSim = null;
+let currentLayout = 'dagre';
+let currentNodes = null;
+let currentLinks = null;
+let currentFocusSector = null;
+
+function switchLayout(mode) {
+  currentLayout = mode;
+  document.getElementById('btn-dagre').classList.toggle('active', mode === 'dagre');
+  document.getElementById('btn-force').classList.toggle('active', mode === 'force');
+  if (currentNodes && currentLinks) {
+    renderGraph(currentNodes, currentLinks, currentFocusSector);
+  }
+}
+
+function computeDagreLayout(nodes, links, width, height) {
+  const g = new dagre.graphlib.Graph();
+  g.setGraph({ rankdir: 'TB', nodesep: 60, ranksep: 100, marginx: 40, marginy: 40 });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  nodes.forEach(n => {
+    g.setNode(n.id, { width: 80, height: 40 });
+  });
+  links.forEach(l => {
+    const src = typeof l.source === 'object' ? l.source.id : l.source;
+    const tgt = typeof l.target === 'object' ? l.target.id : l.target;
+    g.setEdge(src, tgt);
+  });
+
+  dagre.layout(g);
+
+  // Map positions back to nodes
+  const pos = {};
+  g.nodes().forEach(id => {
+    const n = g.node(id);
+    if (n) pos[id] = { x: n.x, y: n.y };
+  });
+
+  // Center the layout
+  const xs = Object.values(pos).map(p => p.x);
+  const ys = Object.values(pos).map(p => p.y);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const graphW = maxX - minX || 1;
+  const graphH = maxY - minY || 1;
+  const scale = Math.min(width * 0.8 / graphW, height * 0.8 / graphH, 1.5);
+  const offX = (width - graphW * scale) / 2 - minX * scale;
+  const offY = (height - graphH * scale) / 2 - minY * scale;
+
+  nodes.forEach(n => {
+    const p = pos[n.id];
+    if (p) {
+      n.x = p.x * scale + offX;
+      n.y = p.y * scale + offY;
+      n.fx = n.x;
+      n.fy = n.y;
+    }
+  });
+}
+
+// ═══ OVERVIEW PAGE ═══
+function buildOverview() {
+  const grid = document.getElementById('sectorGrid');
+  grid.innerHTML = '';
+
+  Object.entries(sectorColors).forEach(([sector, color]) => {
+    const info = sectorSummary[sector];
+    if (!info) return;
+    const nodes = info.nodes || [];
+    const edgeCount = info.edge_count || 0;
+    const badges = info.badges || [];
+
+    const card = document.createElement('div');
+    card.className = 'sector-card';
+    card.onclick = () => showSectorDetail(sector);
+
+    let badgeHtml = '';
+    if (badges.length > 0) {
+      badgeHtml = '<div class="badge-row">' + badges.map(b => {
+        const c = badgeColors[b] || '#64748b';
+        return `<span class="badge-tag" style="background:${c}30;color:${c}">${b}</span>`;
+      }).join('') + '</div>';
+    }
+
+    card.innerHTML = `
+      <div class="color-bar" style="background:${color}"></div>
+      <h3><span style="color:${color}">●</span> ${sector}</h3>
+      <div class="stats">${nodes.length} companies · ${edgeCount} relationships · ${(info.countries||[]).join(', ')}</div>
+      <div class="node-list">
+        ${nodes.slice(0,8).map(n => `<span class="node-tag">${n.name}</span>`).join('')}
+        ${nodes.length > 8 ? `<span class="node-tag" style="color:#64748b">+${nodes.length-8}</span>` : ''}
+      </div>
+      ${badgeHtml}
+    `;
+    grid.appendChild(card);
+  });
+
+  // "All" card
+  const allCard = document.createElement('div');
+  allCard.className = 'sector-card';
+  allCard.style.borderColor = '#5eead4';
+  allCard.onclick = () => showSectorDetail('__ALL__');
+  allCard.innerHTML = `
+    <div class="color-bar" style="background:#5eead4"></div>
+    <h3><span style="color:#5eead4">◉</span> View All Sectors</h3>
+    <div class="stats">${allData.nodes.length} companies · ${allData.links.length} relationships</div>
+    <div class="node-list"><span class="node-tag" style="color:#5eead4">Show complete supply chain graph →</span></div>
+  `;
+  grid.appendChild(allCard);
+}
+
+function showOverview() {
+  document.getElementById('overview').style.display = 'block';
+  document.getElementById('detail').style.display = 'none';
+  document.getElementById('bc-sector').innerHTML = '';
+  if (currentSim) { currentSim.stop(); currentSim = null; }
+  d3.select('#graph').selectAll('*').remove();
+}
+
+// ═══ DETAIL PAGE ═══
+function showSectorDetail(sector) {
+  document.getElementById('overview').style.display = 'none';
+  document.getElementById('detail').style.display = 'block';
+
+  const sectorLabel = sector === '__ALL__' ? 'All Sectors' : sector;
+  document.getElementById('bc-sector').innerHTML = ` <span style="color:#64748b">›</span> <span style="color:#e2e8f0">${sectorLabel}</span>`;
+
+  // Filter data for this sector
+  let nodes, links;
+  if (sector === '__ALL__') {
+    nodes = allData.nodes;
+    links = allData.links;
+  } else {
+    const sectorNodeIds = new Set(allData.nodes.filter(n => n.sector === sector).map(n => n.id));
+    // Include connected nodes from other sectors (1-hop)
+    allData.links.forEach(l => {
+      if (sectorNodeIds.has(l.source) || sectorNodeIds.has(l.target)) {
+        sectorNodeIds.add(l.source);
+        sectorNodeIds.add(l.target);
+      }
+    });
+    nodes = allData.nodes.filter(n => sectorNodeIds.has(n.id));
+    links = allData.links.filter(l => sectorNodeIds.has(l.source) && sectorNodeIds.has(l.target));
+  }
+
+  renderGraph(nodes, links, sector);
+}
+
+function renderGraph(nodes, links, focusSector) {
+  if (currentSim) { currentSim.stop(); }
+  currentNodes = nodes;
+  currentLinks = links;
+  currentFocusSector = focusSector;
+
+  // Deep clone to avoid mutation issues on re-render
+  nodes = nodes.map(n => ({...n}));
+  links = links.map(l => ({source: typeof l.source==='object'?l.source.id:l.source, target: typeof l.target==='object'?l.target.id:l.target, ...l}));
+
+  const svg = d3.select('#graph');
+  svg.selectAll('*').remove();
+
+  const width = window.innerWidth;
+  const height = window.innerHeight - 140;
+  svg.attr('width', width).attr('height', height);
+  const g = svg.append('g');
+
+  svg.call(d3.zoom().scaleExtent([0.1, 5]).on('zoom', (e) => g.attr('transform', e.transform)));
+
+  // Arrows
+  svg.append('defs').selectAll('marker')
+    .data(['verified','pending']).join('marker')
+    .attr('id', d => `arrow-${d}`).attr('viewBox','0 -5 10 10')
+    .attr('refX',22).attr('refY',0).attr('markerWidth',6).attr('markerHeight',6).attr('orient','auto')
+    .append('path').attr('d','M0,-5L10,0L0,5')
+    .attr('fill', d => d==='verified' ? '#475569' : '#334155');
+
+  function nodeRadius(d) {
+    const base = d.watchlist ? 14 : 9;
+    return base + Math.min(d.degree * 2, 12);
+  }
+
+  // Apply layout
+  if (currentLayout === 'dagre') {
+    computeDagreLayout(nodes, links, width, height);
+    // Create a sim that doesn't move nodes (fixed positions from dagre)
+    currentSim = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id))
+      .alpha(0).stop();
+    // Resolve link references
+    currentSim.tick();
+  } else {
+    // Remove fixed positions
+    nodes.forEach(n => { n.fx = null; n.fy = null; });
+    currentSim = d3.forceSimulation(nodes)
+      .force('link', d3.forceLink(links).id(d => d.id).distance(110))
+      .force('charge', d3.forceManyBody().strength(-350))
+      .force('center', d3.forceCenter(width/2, height/2))
+      .force('collision', d3.forceCollide().radius(d => nodeRadius(d) + 10));
+  }
+
+  const link = g.append('g').selectAll('line').data(links).join('line')
+    .attr('stroke', d => d.status==='verified' ? '#475569' : '#334155')
+    .attr('stroke-width', d => d.status==='verified' ? 1.8 : 1)
+    .attr('stroke-dasharray', d => d.status==='pending' ? '4,3' : 'none')
+    .attr('marker-end', d => `url(#arrow-${d.status})`);
+
+  const linkLabel = g.append('g').selectAll('text').data(links).join('text')
+    .attr('class','link-label')
+    .text(d => d.category !== 'General' ? d.category : '');
+
+  const node = g.append('g').selectAll('circle').data(nodes).join('circle')
+    .attr('r', d => nodeRadius(d))
+    .attr('fill', d => {
+      if (focusSector !== '__ALL__' && d.sector !== focusSector) return '#334155';
+      return d.color;
+    })
+    .attr('stroke', d => d.watchlist ? '#fbbf24' : 'none')
+    .attr('stroke-width', d => d.watchlist ? 2.5 : 0)
+    .attr('opacity', d => (focusSector==='__ALL__' || d.sector===focusSector) ? 1 : 0.5)
+    .attr('cursor','pointer')
+    .call(d3.drag()
+      .on('start', (e,d) => { if(!e.active) currentSim.alphaTarget(0.3).restart(); d.fx=d.x; d.fy=d.y; })
+      .on('drag', (e,d) => { d.fx=e.x; d.fy=e.y; })
+      .on('end', (e,d) => { if(!e.active) currentSim.alphaTarget(0); d.fx=null; d.fy=null; }));
+
+  const badgeRing = g.append('g').selectAll('circle')
+    .data(nodes.filter(d => d.badges && d.badges.length > 0)).join('circle')
+    .attr('r', d => nodeRadius(d) + 5)
+    .attr('fill', 'none')
+    .attr('stroke', d => badgeColors[d.badges[0]] || '#64748b')
+    .attr('stroke-width', 2.5)
+    .attr('pointer-events', 'none');
+
+  const label = g.append('g').selectAll('text').data(nodes).join('text')
+    .attr('class','node-label')
+    .attr('dy', d => nodeRadius(d) + 14)
+    .text(d => d.name.length > 14 ? d.name.slice(0,14)+'…' : d.name);
+
+  // Tooltip
+  const tooltip = document.getElementById('tooltip');
+  node.on('mouseover', (e, d) => {
+    const incoming = links.filter(l => (l.target.id||l.target)===d.id);
+    const outgoing = links.filter(l => (l.source.id||l.source)===d.id);
+    let h = `<h3>${d.name}</h3><div class="meta">${d.id} | ${d.sector} | ${d.country}</div>`;
+    if (d.badges && d.badges.length) {
+      h += d.badges.map(b => `<span class="badge-tag" style="background:${(badgeColors[b]||'#64748b')+'30'};color:${badgeColors[b]||'#64748b'}">${b}</span>`).join('');
+    }
+    if (d.doi_value) h += `<div class="meta">DOI: ${d.doi_value}d ${d.doi_status||''}</div>`;
+    if (d.fat) h += `<div class="meta">FAT: ${d.fat}</div>`;
+    if (d.capex_yoy) h += `<div class="meta">Capex YoY: ${(d.capex_yoy*100).toFixed(1)}%</div>`;
+    h += '<div class="edges">';
+    if (incoming.length) {
+      h += `<b>⬆ Suppliers (${incoming.length}):</b><br>`;
+      incoming.slice(0,4).forEach(l => { const s=typeof l.source==='object'?l.source:nodes.find(n=>n.id===l.source); h+=`  ${s?.name||'?'} [${l.category}]<br>`; });
+    }
+    if (outgoing.length) {
+      h += `<b>⬇ Customers (${outgoing.length}):</b><br>`;
+      outgoing.slice(0,4).forEach(l => { const t=typeof l.target==='object'?l.target:nodes.find(n=>n.id===l.target); h+=`  [${l.category}] → ${t?.name||'?'}<br>`; });
+    }
+    h += '</div>';
+    tooltip.innerHTML = h;
+    tooltip.style.display = 'block';
+    tooltip.style.left = (e.pageX+15)+'px';
+    tooltip.style.top = (e.pageY-10)+'px';
+  })
+  .on('mousemove', (e) => { tooltip.style.left=(e.pageX+15)+'px'; tooltip.style.top=(e.pageY-10)+'px'; })
+  .on('mouseout', () => { tooltip.style.display='none'; })
+  .on('click', (e, d) => {
+    const sb = document.getElementById('sidebar');
+    const content = document.getElementById('sidebar-content');
+    const incoming = links.filter(l => (l.target.id||l.target)===d.id);
+    const outgoing = links.filter(l => (l.source.id||l.source)===d.id);
+    let h = `<h3>${d.name}</h3><table>
+      <tr><td>Ticker</td><td>${d.id}</td></tr>
+      <tr><td>Sector</td><td>${d.sector}</td></tr>
+      <tr><td>Country</td><td>${d.country}</td></tr>
+      <tr><td>Watchlist</td><td>${d.watchlist?'✅':'—'}</td></tr>
+      <tr><td>Connections</td><td>${incoming.length+outgoing.length}</td></tr></table>`;
+    if ((d.badges&&d.badges.length)||d.doi_value||d.fat) {
+      h += '<div class="badge-section"><b style="color:#5eead4;font-size:11px">Fundamental Signals</b><br>';
+      if (d.badges) d.badges.forEach(b => { h+=`<span class="badge-item" style="background:${(badgeColors[b]||'#64748b')+'30'};color:${badgeColors[b]||'#64748b'}">${b}</span>`; });
+      if (d.doi_value) h+=`<br><span style="font-size:10px;color:#94a3b8">DOI: ${d.doi_value}d ${d.doi_status||''}</span>`;
+      if (d.cycle_phase) h+=`<br><span style="font-size:10px;color:#94a3b8">Cycle: ${d.cycle_phase}</span>`;
+      if (d.fat) h+=`<br><span style="font-size:10px;color:#94a3b8">FAT: ${d.fat}</span>`;
+      if (d.capex_yoy) h+=`<br><span style="font-size:10px;color:#94a3b8">Capex YoY: ${(d.capex_yoy*100).toFixed(1)}%</span>`;
+      h += '</div>';
+    }
+    if (incoming.length) {
+      h += `<h3 style="margin-top:12px">⬆ Suppliers (${incoming.length})</h3><table>`;
+      incoming.forEach(l => { const s=typeof l.source==='object'?l.source:nodes.find(n=>n.id===l.source); h+=`<tr><td>${s?.name||'?'}</td><td style="color:#5eead4">${l.category}</td></tr>`; });
+      h += '</table>';
+    }
+    if (outgoing.length) {
+      h += `<h3 style="margin-top:12px">⬇ Customers (${outgoing.length})</h3><table>`;
+      outgoing.forEach(l => { const t=typeof l.target==='object'?l.target:nodes.find(n=>n.id===l.target); h+=`<tr><td>${t?.name||'?'}</td><td style="color:#f59e0b">${l.category}</td></tr>`; });
+      h += '</table>';
+    }
+    content.innerHTML = h;
+    sb.classList.add('open');
+    // Highlight
+    const connected = new Set([d.id]);
+    incoming.forEach(l => connected.add(typeof l.source==='object'?l.source.id:l.source));
+    outgoing.forEach(l => connected.add(typeof l.target==='object'?l.target.id:l.target));
+    node.attr('opacity', n => connected.has(n.id)?1:0.12);
+    badgeRing.attr('opacity', n => connected.has(n.id)?1:0.05);
+    label.attr('opacity', n => connected.has(n.id)?1:0.08);
+    link.attr('opacity', l => { const s=typeof l.source==='object'?l.source.id:l.source; const t=typeof l.target==='object'?l.target.id:l.target; return (s===d.id||t===d.id)?1:0.03; });
+  });
+
+  // Search
+  document.getElementById('search').value = '';
+  document.getElementById('search').oninput = (e) => {
+    const q = e.target.value.toLowerCase();
+    node.attr('opacity', d => !q||(d.name.toLowerCase().includes(q)||d.id.toLowerCase().includes(q))?1:0.06);
+    label.attr('opacity', d => !q||(d.name.toLowerCase().includes(q)||d.id.toLowerCase().includes(q))?1:0.06);
+    link.attr('opacity', !q?0.6:0.05);
+  };
+
+  currentSim.on('tick', () => {
+    link.attr('x1',d=>d.source.x).attr('y1',d=>d.source.y).attr('x2',d=>d.target.x).attr('y2',d=>d.target.y);
+    linkLabel.attr('x',d=>(d.source.x+d.target.x)/2).attr('y',d=>(d.source.y+d.target.y)/2);
+    node.attr('cx',d=>d.x).attr('cy',d=>d.y);
+    badgeRing.attr('cx',d=>d.x).attr('cy',d=>d.y);
+    label.attr('x',d=>d.x).attr('y',d=>d.y);
+  });
+}
+
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  d3.selectAll('#graph circle').attr('opacity', 1);
+  d3.selectAll('#graph text').attr('opacity', 1);
+  d3.selectAll('#graph line').attr('opacity', 0.6);
+}
+
+// Init
+buildOverview();
+</script>
+</body>
+</html>
